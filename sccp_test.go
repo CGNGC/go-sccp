@@ -11,8 +11,8 @@ import (
 	"testing"
 
 	"github.com/pascaldekloe/goe/verify"
-	"github.com/wmnsk/go-sccp"
-	"github.com/wmnsk/go-sccp/params"
+	"github.com/cgngc/go-sccp"
+	"github.com/cgngc/go-sccp/params"
 )
 
 type serializable interface {

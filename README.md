@@ -2,10 +2,10 @@
 
 Package sccp provides simple and painless handling of SCCP (Signaling Connection Control Part) in SS7/SIGTRAN stack, implemented in the Go Programming Language.
 
-[![CI status](https://github.com/wmnsk/go-sccp/actions/workflows/go.yml/badge.svg)](https://github.com/wmnsk/go-sccp/actions/workflows/go.yml)
-[![golangci-lint](https://github.com/wmnsk/go-sccp/actions/workflows/golangci-lint.yml/badge.svg)](https://github.com/wmnsk/go-sccp/actions/workflows/golangci-lint.yml)
-[![Go Reference](https://pkg.go.dev/badge/github.com/wmnsk/go-sccp.svg)](https://pkg.go.dev/github.com/wmnsk/go-sccp)
-[![GitHub](https://img.shields.io/github/license/mashape/apistatus.svg)](https://github.com/wmnsk/go-sccp/blob/main/LICENSE)
+[![CI status](https://github.com/cgngc/go-sccp/actions/workflows/go.yml/badge.svg)](https://github.com/cgngc/go-sccp/actions/workflows/go.yml)
+[![golangci-lint](https://github.com/cgngc/go-sccp/actions/workflows/golangci-lint.yml/badge.svg)](https://github.com/cgngc/go-sccp/actions/workflows/golangci-lint.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/cgngc/go-sccp.svg)](https://pkg.go.dev/github.com/cgngc/go-sccp)
+[![GitHub](https://img.shields.io/github/license/mashape/apistatus.svg)](https://github.com/cgngc/go-sccp/blob/main/LICENSE)
 
 ## Disclaimer
 
@@ -69,8 +69,8 @@ Run `go mod tidy` to download the dependency, and you're ready to start developi
 
 ## Author(s)
 
-Yoshiyuki Kurauchi ([Website](https://wmnsk.com/)) and [contributors](https://github.com/wmnsk/go-sccp/graphs/contributors).
+Yoshiyuki Kurauchi ([Website](https://cgngc.com/)) and [contributors](https://github.com/cgngc/go-sccp/graphs/contributors).
 
 ## LICENSE
 
-[MIT](https://github.com/wmnsk/go-sccp/blob/main/LICENSE)
+[MIT](https://github.com/cgngc/go-sccp/blob/main/LICENSE)

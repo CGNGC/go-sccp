@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/wmnsk/go-sccp/utils"
+	"ViNGC/hlr/Map/pkg/mod/go-sccp/utils"
 )
 
 // UnsupportedParameterError indicates the value in Version field is invalid.
@@ -553,6 +553,39 @@ func (p *PartyAddress) Write(b []byte) (int, error) {
 	return p.writeOptional(b)
 }
 
+/*
+	func (p *PartyAddress) write(b []byte) (int, error) {
+		if len(b) < p.MarshalLen() {
+			return 0, io.ErrUnexpectedEOF
+		}
+
+		b[0] = uint8(p.length)
+		b[1] = p.Indicator
+
+		var n = 2
+		if p.HasPC() {
+			binary.LittleEndian.PutUint16(b[n:n+2], p.SignalingPointCode)
+			n += 2
+		}
+
+		if p.HasSSN() {
+			b[n] = p.SubsystemNumber
+			n++
+		}
+
+		if p.GlobalTitle != nil {
+			m, err := p.GlobalTitle.Write(b[n : n+p.GlobalTitle.MarshalLen()])
+			if err != nil {
+				return n + m, err
+			}
+			n += m
+		}
+
+		return n, nil
+	}
+*/
+// Enhanced Global Title Write method
+// Enhanced PartyAddress write method (replace the existing one)
 func (p *PartyAddress) write(b []byte) (int, error) {
 	if len(b) < p.MarshalLen() {
 		return 0, io.ErrUnexpectedEOF
@@ -572,6 +605,14 @@ func (p *PartyAddress) write(b []byte) (int, error) {
 		n++
 	}
 
+	/*if p.GlobalTitle != nil {
+		// Manual GT marshaling since library's GT.Write() is buggy
+		m, err := p.writeGlobalTitleFixed(b[n:])
+		if err != nil {
+			return n + m, err
+		}
+		n += m
+	}*/
 	if p.GlobalTitle != nil {
 		m, err := p.GlobalTitle.Write(b[n : n+p.GlobalTitle.MarshalLen()])
 		if err != nil {
@@ -581,6 +622,45 @@ func (p *PartyAddress) write(b []byte) (int, error) {
 	}
 
 	return n, nil
+
+}
+
+func (p *PartyAddress) writeGlobalTitleFixed(b []byte) (int, error) {
+	if p.GlobalTitle == nil {
+		return 0, nil
+	}
+
+	gt := p.GlobalTitle
+	offset := 0
+
+	switch gt.GTI {
+	case GTITTNPESNAI: // GTI = 4
+		// Don't write GTI here - it's already encoded in Address Indicator
+		// Write Translation Type (0x00)
+		b[offset] = uint8(gt.TranslationType)
+		offset++
+		//np, _ := strconv.Atoi(gt.NumberingPlan)
+		//ne, _ := strconv.Atoi(gt.EncodingScheme)
+		// Write 0x11 (this appears to be a fixed value in your expected format)
+		b[offset] = (uint8(gt.NumberingPlan)&0x0F)<<4 | (uint8(gt.EncodingScheme) & 0x0F)
+		offset++
+
+		// Write GTI (0x04)
+		b[offset] = uint8(gt.NatureOfAddressIndicator)
+		offset++
+
+		// // Write combined NP+ES (0x06)
+		// b[offset] = 0x06
+		// offset++
+
+		// Write Address Information (5 bytes)
+		if gt.AddressInformation != nil {
+			copy(b[offset:], gt.AddressInformation)
+			offset += len(gt.AddressInformation)
+		}
+	}
+
+	return offset, nil
 }
 
 func (p *PartyAddress) writeOptional(b []byte) (int, error) {
@@ -598,6 +678,40 @@ func (p *PartyAddress) writeOptional(b []byte) (int, error) {
 }
 
 // MarshalLen returns the serial length.
+/*func (p *PartyAddress) MarshalLen() int {
+	l := 2
+	if p.HasPC() {
+		l += 2
+	}
+
+	if p.HasSSN() {
+		l++
+	}
+
+	if p.GlobalTitle != nil {
+		l = l + p.GlobalTitle.MarshalLen()
+	}
+
+	return l
+}*/
+/*func (p *PartyAddress) MarshalLen() int {
+	l := 2 // length byte + Address Indicator
+
+	if p.HasPC() {
+		l += 2
+	}
+
+	if p.HasSSN() {
+		l++
+	}
+
+	if p.GlobalTitle != nil && p.GTI() == GTITTNPESNAI {
+		// GTI(1) + TT(1) + NP+ES(1) + Address Info(5) = 8 bytes
+		l += 8
+	}
+
+	return l
+}*/
 func (p *PartyAddress) MarshalLen() int {
 	l := 2
 	if p.HasPC() {
@@ -628,7 +742,7 @@ func (p *PartyAddress) Value() *PartyAddress {
 // String returns the PartyAddress values in human readable format.
 func (p *PartyAddress) String() string {
 	return fmt.Sprintf("{%s (%s): {length: %d, Indicator: %#08b, SignalingPointCode: %d, SubsystemNumber: %d, GlobalTitle: %v}}",
-		p.code, p.paramType, p.length, p.Indicator, p.SignalingPointCode, p.SubsystemNumber, p.GlobalTitle,
+		p.code, p.paramType, p.length, p.Indicator, p.GetRoutingType(), p.SignalingPointCode, p.SubsystemNumber, p.GlobalTitle, p.Address(),
 	)
 }
 
@@ -667,6 +781,81 @@ func (p *PartyAddress) SetLength() {
 	p.length = p.MarshalLen() - 1
 }
 
+// Address returns the address information as a string based on routing indicator
+func (p *PartyAddress) Address() string {
+	if p.RouteOnSSN() {
+		// Route on SSN - return point code and subsystem number
+		if p.HasPC() && p.HasSSN() {
+			return fmt.Sprintf("PC:%d,SSN:%d", p.SignalingPointCode, p.SubsystemNumber)
+		} else if p.HasSSN() {
+			return fmt.Sprintf("SSN:%d", p.SubsystemNumber)
+		} else if p.HasPC() {
+			return fmt.Sprintf("PC:%d", p.SignalingPointCode)
+		}
+		return "SSN_ROUTING"
+	} else {
+		// Route on Global Title
+		if p.GlobalTitle != nil {
+			gtAddr := p.GlobalTitle.Address()
+			if gtAddr != "" {
+				return fmt.Sprintf("GT:%s", gtAddr)
+			}
+		}
+		return "GT_ROUTING"
+	}
+}
+
+// AddressWithDetails returns detailed address information including routing type
+func (p *PartyAddress) AddressWithDetails() string {
+	var parts []string
+
+	// Add routing type
+	if p.RouteOnSSN() {
+		parts = append(parts, "Route:SSN")
+	} else {
+		parts = append(parts, "Route:GT")
+	}
+
+	// Add point code if present
+	if p.HasPC() {
+		parts = append(parts, fmt.Sprintf("PC:%d", p.SignalingPointCode))
+	}
+
+	// Add subsystem number if present
+	if p.HasSSN() {
+		parts = append(parts, fmt.Sprintf("SSN:%d", p.SubsystemNumber))
+	}
+
+	// Add global title if present
+	if p.GlobalTitle != nil {
+		gtAddr := p.GlobalTitle.Address()
+		if gtAddr != "" {
+			parts = append(parts, fmt.Sprintf("GT:%s", gtAddr))
+		}
+	}
+
+	return fmt.Sprintf("{%s}", fmt.Sprintf("%s", parts))
+}
+
+// GetRoutingType returns the routing type as a string
+func (p *PartyAddress) GetRoutingType() string {
+	if p.RouteOnSSN() {
+		return "SSN"
+	}
+	return "GT"
+}
+
+// IsValidForRouting checks if the address has the required components for its routing type
+func (p *PartyAddress) IsValidForRouting() bool {
+	if p.RouteOnSSN() {
+		// For SSN routing, we need at least SSN and typically PC
+		return p.HasSSN() && p.HasPC()
+	} else {
+		// For GT routing, we need a valid Global Title
+		return p.GlobalTitle != nil && len(p.GlobalTitle.AddressInformation) > 0
+	}
+}
+
 // ProtocolClass is a Protocol Class SCCP parameter.
 type ProtocolClass struct {
 	paramType ParameterType
@@ -689,6 +878,36 @@ func NewProtocolClass(cls int, returnOnError bool) *ProtocolClass {
 	}
 
 	return p
+}
+
+// protocol class constants
+const (
+	PROTOCOL_CLASS_0    = 0x00
+	PROTOCOL_CLASS_1    = 0x01
+	PROTOCOL_CLASS_MASK = 0x0F
+	RETURN_OPTION_MASK  = 0x80
+)
+
+// protocol class validation methods
+func (p *ProtocolClass) GetProtocolClass() int {
+	return int(p.value) & PROTOCOL_CLASS_MASK
+}
+
+func (p *ProtocolClass) HasReturnOption() bool {
+	return (p.value & RETURN_OPTION_MASK) != 0
+}
+
+func (p *ProtocolClass) IsValidUDTClass() bool {
+	class := p.GetProtocolClass()
+	return class == PROTOCOL_CLASS_0 || class == PROTOCOL_CLASS_1
+}
+
+func (p *ProtocolClass) IsClass0() bool {
+	return p.GetProtocolClass() == PROTOCOL_CLASS_0
+}
+
+func (p *ProtocolClass) IsClass1() bool {
+	return p.GetProtocolClass() == PROTOCOL_CLASS_1
 }
 
 // ParseProtocolClass parses the given byte sequence as a ProtocolClass.

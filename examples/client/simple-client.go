@@ -27,7 +27,7 @@ import (
 
 func main() {
 	var (
-		addr  = flag.String("addr", "127.0.0.1:2905", "Remote IP and Port to connect to.")
+		addr  = flag.String("addr", "172.19.91.151:2905", "Remote IP and Port to connect to.")
 		data  = flag.String("data", "deadbeef", "Payload to send on UDT in hex format.")
 		hbInt = flag.Duration("hb-interval", 0, "Interval for M3UA BEAT. Put 0 to disable")
 	)
@@ -95,13 +95,44 @@ func main() {
 		),
 	)
 	// create UDT message with CdPA, CgPA and payload
-	udt := sccp.NewUDT(
+	/*udt := sccp.NewUDT(
 		1,    // Protocol Class
 		true, // Message handling
 		cdPA,
 		cgPA,
 		payload, // payload
+	)*/
+
+	// Create UDT with Class 0 (connectionless)
+	udt := sccp.NewUDT(
+		0,     // Protocol Class 0
+		false, // No return on error
+		5,     // SLS value
+		cdPA,
+		cgPA,
+		payload,
 	)
+
+	if udt == nil {
+		log.Fatal("Failed to create UDT - invalid protocol class")
+	}
+
+	class, retOpt := udt.GetProtocolClassInfo()
+	log.Printf("UDT Protocol Class: %d, Return Option: %v", class, retOpt)
+
+	// Create UDT with Class 1 (with sequencing)
+	udt1 := sccp.NewUDT(
+		1, // Protocol Class with sequencing
+		false,
+		5, // SLS value (example)
+		cdPA,
+		cgPA,
+		payload, // wrap payload in params.Data
+	)
+	if udt1 == nil {
+		log.Fatal("Failed to create UDT Class 1")
+	}
+
 	u, err := udt.MarshalBinary()
 	if err != nil {
 		log.Fatal(err)
@@ -123,8 +154,12 @@ func main() {
 	}
 
 	// send once
+
 	i := 1
-	log.Printf("Sending %04d: %v", i, udt)
+
+	log.Printf("Sending %04d: UDT=%v, UDT1=%v (SLS=%d)", i, udt, udt1, udt.SLS)
+
+	//log.Printf("Sending %04d: %v", i, udt)
 	if _, err := m3conn.Write(u); err != nil {
 		log.Fatal(err)
 	}
