@@ -18,9 +18,9 @@ import (
 	"github.com/ishidawataru/sctp"
 	m3params "github.com/wmnsk/go-m3ua/messages/params"
 
-	"github.com/wmnsk/go-sccp"
-	"github.com/wmnsk/go-sccp/params"
-	"github.com/wmnsk/go-sccp/utils"
+	"github.com/cgngc/go-sccp"
+	"github.com/cgngc/go-sccp/params"
+	"github.com/cgngc/go-sccp/utils"
 
 	"github.com/wmnsk/go-m3ua"
 )

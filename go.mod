@@ -1,11 +1,13 @@
-module github.com/cgngc/go-sccp
+module github.com/CGNGC/go-sccp
 
 go 1.23
 
+replace github.com/wmnsk/go-sccp => github.com/CGNGC/go-sccp v1.0.1
+
 require (
+	github.com/cgngc/go-sccp v1.0.1
 	github.com/google/go-cmp v0.7.0
 	github.com/ishidawataru/sctp v0.0.0-20250427101207-53eab83c1cf6
 	github.com/pascaldekloe/goe v0.1.1
 	github.com/wmnsk/go-m3ua v0.1.11
-	github.com/wmnsk/go-sccp v0.0.5
 )

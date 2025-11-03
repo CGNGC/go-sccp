@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/wmnsk/go-m3ua/messages/params"
-	"github.com/wmnsk/go-sccp"
+	"github.com/cgngc/go-sccp"
 
 	"github.com/ishidawataru/sctp"
 	"github.com/wmnsk/go-m3ua"
