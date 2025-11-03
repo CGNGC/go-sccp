@@ -8,6 +8,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"time"
 )
 
 // SCMGType is type of SCMG message.
@@ -138,4 +139,251 @@ func (s *SCMG) MessageType() SCMGType {
 // MessageTypeName returns the Message Type in string.
 func (s *SCMG) MessageTypeName() string {
 	return s.Type.String()
+}
+
+// SSN State Management Methods for SSNStateManager
+
+// HandleUserInService - Handle N-STATE Request with UIS
+func (sm *SSNStateManager) HandleUserInService(pc uint16, ssn uint8) error {
+	entry := sm.GetEntry(pc, ssn)
+	if entry == nil {
+		return fmt.Errorf("SSN entry not found: PC=%d, SSN=%d", pc, ssn)
+	}
+
+	if !entry.IsLocal {
+		return fmt.Errorf("cannot change state of remote subsystem")
+	}
+
+	if entry.IsProhibited() {
+		entry.MarkAllowed()
+
+		// Trigger callbacks
+		if sm.OnStateChange != nil {
+			sm.OnStateChange(entry, SSNStateAllowed, ReasonUserInitiated)
+		}
+
+		// Broadcast SSA to network
+		if sm.OnBroadcast != nil {
+			sm.OnBroadcast(BroadcastSSA, entry)
+		}
+
+		logf("Local subsystem allowed: PC=%d, SSN=%d", pc, ssn)
+	}
+
+	return nil
+}
+
+// HandleUserOutOfService - Handle N-STATE Request with UOS
+func (sm *SSNStateManager) HandleUserOutOfService(pc uint16, ssn uint8) error {
+	entry := sm.GetEntry(pc, ssn)
+	if entry == nil {
+		return fmt.Errorf("SSN entry not found: PC=%d, SSN=%d", pc, ssn)
+	}
+
+	if !entry.IsLocal {
+		return fmt.Errorf("cannot change state of remote subsystem")
+	}
+
+	if entry.IsAllowed() {
+		entry.MarkProhibited()
+
+		// Stop any ongoing tests
+		sm.stopSST(entry)
+
+		// Trigger callbacks
+		if sm.OnStateChange != nil {
+			sm.OnStateChange(entry, SSNStateProhibited, ReasonUserInitiated)
+		}
+
+		// Broadcast SSP to network
+		if sm.OnBroadcast != nil {
+			sm.OnBroadcast(BroadcastSSP, entry)
+		}
+
+		logf("Local subsystem prohibited: PC=%d, SSN=%d", pc, ssn)
+	}
+
+	return nil
+}
+
+// HandleSSA - Handle remote Subsystem Allowed message
+func (sm *SSNStateManager) HandleSSA(pc uint16, ssn uint8) error {
+	entry := sm.GetEntry(pc, ssn)
+	if entry == nil {
+		entry = sm.AddEntry(pc, ssn, false)
+	}
+
+	if entry.IsProhibited() {
+		entry.MarkAllowed()
+
+		// Stop subsystem testing
+		sm.stopSST(entry)
+
+		// Trigger callbacks
+		if sm.OnStateChange != nil {
+			sm.OnStateChange(entry, SSNStateAllowed, ReasonNetworkInitiated)
+		}
+
+		logf("Remote subsystem allowed: PC=%d, SSN=%d", pc, ssn)
+	}
+
+	return nil
+}
+
+// HandleSSP - Handle remote Subsystem Prohibited message
+func (sm *SSNStateManager) HandleSSP(pc uint16, ssn uint8) error {
+	entry := sm.GetEntry(pc, ssn)
+	if entry == nil {
+		entry = sm.AddEntry(pc, ssn, false)
+	}
+
+	if entry.IsAllowed() {
+		entry.MarkProhibited()
+
+		// Start subsystem testing
+		sm.startSST(entry)
+
+		// Trigger callbacks
+		if sm.OnStateChange != nil {
+			sm.OnStateChange(entry, SSNStateProhibited, ReasonNetworkInitiated)
+		}
+
+		logf("Remote subsystem prohibited: PC=%d, SSN=%d", pc, ssn)
+	}
+
+	return nil
+}
+
+// HandleSST - Handle Subsystem Test message
+func (sm *SSNStateManager) HandleSST(pc uint16, ssn uint8) error {
+	entry := sm.GetEntry(pc, ssn)
+	if entry == nil {
+		entry = sm.AddEntry(pc, ssn, false)
+	}
+	// If local subsystem is available, respond with SSA
+	if entry.IsLocal && entry.IsAllowed() {
+		// Send SSA response
+		ssa := NewSCMG(SCMGTypeSSA, ssn, pc, 0, 0)
+		ssaBytes, err := ssa.MarshalBinary()
+		if err != nil {
+			return fmt.Errorf("failed to marshal SSA response: %w", err)
+		}
+
+		logf("Responding to SST with SSA for PC=%d, SSN=%d: %x", pc, ssn, ssaBytes)
+		// TODO: Send SSA response over network
+	} else if entry.IsLocal && entry.IsProhibited() {
+		// Local subsystem is prohibited, don't respond (let SST timeout)
+		logf("Local subsystem prohibited, not responding to SST: PC=%d, SSN=%d", pc, ssn)
+	}
+
+	return nil
+}
+
+// startSST - Start subsystem testing with exponential backoff
+func (sm *SSNStateManager) startSST(entry *SSNEntry) {
+	if entry.IsLocal {
+		return // Don't test local subsystems
+	}
+
+	entry.mutex.Lock()
+	defer entry.mutex.Unlock()
+
+	// Stop existing timer
+	if entry.TestTimer != nil {
+		entry.TestTimer.Stop()
+	}
+
+	// Reset retry count and interval
+	entry.TestRetries = 0
+	entry.TestInterval = sm.DefaultTestInterval
+
+	// Start testing
+	sm.scheduleSST(entry)
+	logf("Started SST for PC=%d, SSN=%d", entry.PointCode, entry.SSN)
+}
+
+// stopSST - Stop subsystem testing
+func (sm *SSNStateManager) stopSST(entry *SSNEntry) {
+	entry.mutex.Lock()
+	defer entry.mutex.Unlock()
+
+	if entry.TestTimer != nil {
+		entry.TestTimer.Stop()
+		entry.TestTimer = nil
+	}
+
+	entry.TestRetries = 0
+	logf("Stopped SST for PC=%d, SSN=%d", entry.PointCode, entry.SSN)
+}
+
+// scheduleSST - Schedule next SST message
+func (sm *SSNStateManager) scheduleSST(entry *SSNEntry) {
+	entry.TestTimer = time.AfterFunc(entry.TestInterval, func() {
+		sm.performSST(entry)
+	})
+}
+
+// performSST - Perform actual SST with exponential backoff
+func (sm *SSNStateManager) performSST(entry *SSNEntry) {
+	entry.mutex.Lock()
+	defer entry.mutex.Unlock()
+
+	if entry.IsAllowed() {
+		return // Subsystem became available, stop testing
+	}
+
+	// Send SST message
+	if err := sm.sendSST(entry.PointCode, entry.SSN); err != nil {
+		logf("Failed to send SST: %v", err)
+	}
+
+	entry.TestRetries++
+
+	if entry.TestRetries >= entry.MaxTestRetries {
+		logf("Max SST retries reached for PC=%d, SSN=%d", entry.PointCode, entry.SSN)
+		return
+	}
+
+	// Exponential backoff
+	entry.TestInterval *= 2
+	if entry.TestInterval > sm.MaxTestInterval {
+		entry.TestInterval = sm.MaxTestInterval
+	}
+
+	// Schedule next test
+	sm.scheduleSST(entry)
+}
+
+// sendSST - Send SST SCMG message
+func (sm *SSNStateManager) sendSST(pc uint16, ssn uint8) error {
+	// Create SST SCMG message
+	sst := NewSCMG(SCMGTypeSST, ssn, pc, 0, 0)
+
+	// TODO: Integrate with your SCCP message sending mechanism
+	// This is where you would send the SST message over your M3UA/SCTP connection
+	logf("Sending SST to PC=%d, SSN=%d", pc, ssn)
+
+	// For now, just log the message that would be sent
+	sstBytes, err := sst.MarshalBinary()
+	if err != nil {
+		return fmt.Errorf("failed to marshal SST: %w", err)
+	}
+
+	logf("SST message bytes: %x", sstBytes)
+	return nil
+}
+
+// ProcessSCMGMessage - Process incoming SCMG messages
+func (sm *SSNStateManager) ProcessSCMGMessage(scmg *SCMG) error {
+	switch scmg.Type {
+	case SCMGTypeSSA:
+		return sm.HandleSSA(scmg.AffectedPC, scmg.AffectedSSN)
+	case SCMGTypeSSP:
+		return sm.HandleSSP(scmg.AffectedPC, scmg.AffectedSSN)
+	case SCMGTypeSST:
+		return sm.HandleSST(scmg.AffectedPC, scmg.AffectedSSN)
+	default:
+		logf("Unhandled SCMG message type: %v", scmg.Type)
+		return nil
+	}
 }

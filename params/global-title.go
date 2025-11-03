@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/wmnsk/go-sccp/utils"
+	"ViNGC/common/log"
+	"ViNGC/hlr/Map/pkg/mod/go-sccp/utils"
 )
 
 // GlobalTitle is a GlobalTitle inside the Called/Calling Party Address.
@@ -114,12 +115,17 @@ func NewGlobalTitle(
 		gt.NatureOfAddressIndicator = nai
 	}
 
+	log.Debug(log.FUNCTIONAL, "", "", "sccp in param %+v", addr)
 	gt.AddressInformation = addr
 	return gt
 }
 
 // Write serializes GlobalTitle to the given byte sequence.
 func (g *GlobalTitle) Write(b []byte) (int, error) {
+	if g == nil {
+		return 0, nil
+	}
+
 	l := g.MarshalLen()
 	if len(b) < l {
 		return 0, io.ErrUnexpectedEOF
@@ -253,6 +259,9 @@ func (g *GlobalTitle) MarshalLen() int {
 
 func (g *GlobalTitle) lenByGTI() int {
 	var l int
+	if g == nil {
+		return 0
+	}
 	switch g.GTI {
 	case GTINAIOnly:
 		l += 1
