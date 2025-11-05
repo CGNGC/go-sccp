@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"io"
 
-	"ViNGC/hlr/Map/pkg/mod/go-sccp/utils"
+	"github.com/CGNGC/go-sccp/utils"
 )
 
 // UnsupportedParameterError indicates the value in Version field is invalid.

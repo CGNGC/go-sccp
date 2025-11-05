@@ -4,8 +4,7 @@ import (
 	"fmt"
 	"io"
 
-	"ViNGC/common/log"
-	"ViNGC/hlr/Map/pkg/mod/go-sccp/utils"
+	"github.com/CGNGC/go-sccp/utils"
 )
 
 // GlobalTitle is a GlobalTitle inside the Called/Calling Party Address.
@@ -115,7 +114,6 @@ func NewGlobalTitle(
 		gt.NatureOfAddressIndicator = nai
 	}
 
-	log.Debug(log.FUNCTIONAL, "", "", "sccp in param %+v", addr)
 	gt.AddressInformation = addr
 	return gt
 }
