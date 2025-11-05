@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/CGNGC/go-sccp/utils"
+	"github.com/cgngc/go-sccp/utils"
 )
 
 // GlobalTitle is a GlobalTitle inside the Called/Calling Party Address.

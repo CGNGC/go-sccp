@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/CGNGC/go-sccp/params"
+	"github.com/cgngc/go-sccp/params"
 )
 
 // XUDT represents a SCCP Message Extended unitdata (XUDT).

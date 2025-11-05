@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/CGNGC/go-sccp/params"
+	"github.com/cgngc/go-sccp/params"
 )
 
 // UDT represents a SCCP Message Unit Data (UDT).
